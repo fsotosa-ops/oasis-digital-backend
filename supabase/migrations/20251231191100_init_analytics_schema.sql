@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS bronze.raw_responses_delta (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
+-- Al activar RLS sin crear políticas, se bloquea todo acceso público (anon/authenticated).
+-- Solo el 'service_role' (tu Edge Function) podrá escribir aquí.
+ALTER TABLE bronze.raw_responses_delta ENABLE ROW LEVEL SECURITY;
+
+
 -- Ingesta desde API (Backfill/Snapshot)
 CREATE TABLE IF NOT EXISTS bronze.raw_responses_snapshot (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -31,6 +36,9 @@ CREATE TABLE IF NOT EXISTS bronze.raw_responses_snapshot (
     payload JSONB NOT NULL,
     ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
+
+-- 🔥 SEGURIDAD: Activamos RLS también para snapshots
+ALTER TABLE bronze.raw_responses_snapshot ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
 -- 3. CAPA SILVER: TRANSFORMACIÓN E INTEGRACIÓN
@@ -49,7 +57,7 @@ SELECT
     source_platform AS source,
     response_token,
     payload->>'form_id' AS form_id,
-    NULL::text AS field_id, -- Placeholder para lógica de desanidación
+    NULL::text AS field_id, 
     NULL::text AS field_ref,
     NULL::text AS response_value,
     payload->'hidden' AS hidden_fields,
@@ -57,7 +65,7 @@ SELECT
 FROM unified;
 
 -- [MATERIALIZED VIEW] int_tf__core: Procesamiento denso para BI
--- Esta vista guarda físicamente los datos para máxima velocidad
+-- Nota: Las vistas materializadas no soportan RLS directo, se controla en el acceso al esquema
 DROP MATERIALIZED VIEW IF EXISTS silver.int_tf__core;
 
 CREATE MATERIALIZED VIEW silver.int_tf__core AS
@@ -65,7 +73,7 @@ SELECT
     user_id,
     response_token,
     form_id,
-    NULL::text AS form_title, -- Se llenará con JOIN a dim_questions o metadata
+    NULL::text AS form_title,
     NULL::text AS field_id,
     NULL::text AS question_text,
     NULL::text AS question_type,
@@ -75,7 +83,7 @@ SELECT
     submitted_at,
     submitted_at::date AS submitted_date
 FROM silver.stg_tf__responses
-WITH NO DATA; -- Se crea la estructura, requiere REFRESH MATERIALIZED VIEW para poblarse
+WITH NO DATA;
 
 -- ==========================================
 -- 4. CAPA GOLD: MODELO DIMENSIONAL
@@ -111,7 +119,7 @@ CREATE TABLE IF NOT EXISTS gold.fact_responses (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id),
     response_token TEXT REFERENCES gold.dim_respondents(response_token),
-    question_text TEXT, -- Según tu CSV original
+    question_text TEXT, 
     response_value TEXT,
     submitted_date DATE,
     workshop_type TEXT,
@@ -119,25 +127,28 @@ CREATE TABLE IF NOT EXISTS gold.fact_responses (
 );
 
 -- ==========================================
--- 5. SEGURIDAD (RLS) - CORREGIDO
+-- 5. SEGURIDAD (RLS) - POLÍTICAS DE USUARIO
 -- ==========================================
 ALTER TABLE gold.dim_respondents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gold.fact_responses ENABLE ROW LEVEL SECURITY;
 
--- 1. Política para fact_responses
+-- 1. Política para fact_responses (Idempotente)
 DROP POLICY IF EXISTS "Usuarios ven sus respuestas" ON gold.fact_responses;
 CREATE POLICY "Usuarios ven sus respuestas" ON gold.fact_responses
 FOR SELECT USING (auth.uid() = user_id);
 
--- 2. Política para dim_respondents
+-- 2. Política para dim_respondents (Idempotente)
 DROP POLICY IF EXISTS "Usuarios ven su perfil" ON gold.dim_respondents;
 CREATE POLICY "Usuarios ven su perfil" ON gold.dim_respondents
 FOR SELECT USING (auth.uid() = user_id);
 
 -- ==========================================
--- 6. PERMISOS (GRANTS)
+-- 6. PERMISOS (GRANTS) PARA AUTOMATIZACIÓN
 -- ==========================================
--- (Mantén aquí el bloque de GRANTS que agregamos en el paso anterior)
+
+-- Permitir que la Edge Function (service_role) opere en estos esquemas
 GRANT USAGE ON SCHEMA bronze, silver, gold TO service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA bronze, silver, gold TO service_role;
+
+-- Asegurar que futuras tablas hereden estos permisos automáticamente
 ALTER DEFAULT PRIVILEGES IN SCHEMA bronze, silver, gold GRANT ALL ON TABLES TO service_role;
