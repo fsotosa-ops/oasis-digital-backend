@@ -119,23 +119,25 @@ CREATE TABLE IF NOT EXISTS gold.fact_responses (
 );
 
 -- ==========================================
--- 5. SEGURIDAD (RLS)
+-- 5. SEGURIDAD (RLS) - CORREGIDO
 -- ==========================================
 ALTER TABLE gold.dim_respondents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gold.fact_responses ENABLE ROW LEVEL SECURITY;
 
+-- 1. Política para fact_responses
+DROP POLICY IF EXISTS "Usuarios ven sus respuestas" ON gold.fact_responses;
 CREATE POLICY "Usuarios ven sus respuestas" ON gold.fact_responses
 FOR SELECT USING (auth.uid() = user_id);
 
+-- 2. Política para dim_respondents
+DROP POLICY IF EXISTS "Usuarios ven su perfil" ON gold.dim_respondents;
 CREATE POLICY "Usuarios ven su perfil" ON gold.dim_respondents
 FOR SELECT USING (auth.uid() = user_id);
 
 -- ==========================================
--- 6. PERMISOS (GRANTS) PARA SERVICE_ROLE
+-- 6. PERMISOS (GRANTS)
 -- ==========================================
--- Necesario para que la Edge Function pueda escribir en estos esquemas
+-- (Mantén aquí el bloque de GRANTS que agregamos en el paso anterior)
 GRANT USAGE ON SCHEMA bronze, silver, gold TO service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA bronze, silver, gold TO service_role;
-
--- Garantizar acceso a futuras tablas que se creen en estos esquemas
 ALTER DEFAULT PRIVILEGES IN SCHEMA bronze, silver, gold GRANT ALL ON TABLES TO service_role;
