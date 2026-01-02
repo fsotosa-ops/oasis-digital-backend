@@ -78,44 +78,82 @@ GRANT ALL ON TABLE bronze.raw_questions_snapshot TO service_role;
 -- ==========================================
 
 -- [VIEW] stg_tf__responses: Unificación de orígenes
+--DROP VIEW IF EXISTS silver.stg_tf__responses CASCADE;
 CREATE OR REPLACE VIEW silver.stg_tf__responses AS
-WITH combined_data AS (
+WITH unnested_webhook AS (
     -- 1. Prioridad 1: Datos del Webhook (Delta)
     SELECT 
-        user_id, 
-        source_platform, 
-        response_token, 
-        payload, 
-        form_id, -- Usamos la columna directa que agregamos
-        created_at AS source_timestamp,
-        1 AS priority -- El número más bajo tiene prioridad
-    FROM bronze.raw_responses_delta
-
-    UNION ALL
-
-    -- 2. Prioridad 2: Datos del Backfill (Snapshot)
-    SELECT 
-        user_id, 
-        source_platform, 
-        response_token, 
-        payload, 
+        id,
+        user_id,
+        source_platform,
+        ingestion_method,
+        (payload->'form_response'->>'submitted_at')::timestamptz AS submitted_at,
+        created_at AS ingested_at,
         form_id,
-        ingested_at AS source_timestamp,
-        2 AS priority -- Prioridad secundaria
-    FROM bronze.raw_responses_snapshot
+        payload->'form_response'->'hidden' AS hidden_fields,
+        response_token,
+        elem->'field'->>'id' AS field_id,
+        elem->'field'->>'ref' AS field_ref,
+        elem->'field'->>'type' AS field_type, -- <--- Columna 11
+        COALESCE(
+          elem->>'text', elem->>'email', elem->>'phone_number', 
+          elem->'choice'->>'label', (elem->>'number')::text, 
+          (elem->>'boolean')::text, elem->>'date'
+        ) AS response_value, -- <--- Columna 12
+        1 AS priority -- <--- Columna 13
+    FROM 
+        bronze.raw_responses_delta,
+        LATERAL jsonb_array_elements(payload->'form_response'->'answers') AS elem
+    WHERE 
+        jsonb_typeof(payload->'form_response'->'answers') = 'array'
+),
+unnested_api_backfill AS (
+    -- 2. Prioridad 2: Datos de la API (Snapshot)
+    SELECT 
+        id,
+        user_id,
+        source_platform,
+        ingestion_method,
+        (payload->>'submitted_at')::timestamptz AS submitted_at,
+        ingested_at,
+        form_id,
+        payload->'hidden' AS hidden_fields, 
+        response_token, -- Usamos la columna directa
+        elem->'field'->>'id' AS field_id,
+        elem->'field'->>'ref' AS field_ref,
+        elem->'field'->>'type' AS field_type, -- <--- AGREGADA para igualar el UNION
+        COALESCE(
+          elem->>'text', elem->>'email', elem->>'phone_number', 
+          elem->'choice'->>'label', (elem->>'number')::text, 
+          (elem->>'boolean')::text, elem->>'date'
+        ) AS response_value,
+        2 AS priority
+    FROM 
+        bronze.raw_responses_snapshot,
+        LATERAL jsonb_array_elements(payload->'answers') AS elem
+    WHERE 
+        jsonb_typeof(payload->'answers') = 'array'
+),
+combined_data AS (
+    SELECT * FROM unnested_webhook
+    UNION ALL 
+    SELECT * FROM unnested_api_backfill
 )
-SELECT DISTINCT ON (response_token) -- <--- LA MAGIA: Mantiene solo 1 fila por token
+SELECT DISTINCT ON (response_token, field_id)
     user_id,
-    source_platform AS source,
     response_token,
-    COALESCE(form_id, payload->>'form_id') AS form_id, -- Prioriza columna, si no, busca en JSON
-    NULL::text AS field_id, 
-    NULL::text AS field_ref,
-    NULL::text AS response_value,
-    payload->'hidden' AS hidden_fields,
-    source_timestamp AS submitted_at
+    field_id,
+    form_id,
+    submitted_at,
+    ingested_at,
+    hidden_fields,
+    field_ref,
+    field_type,
+    response_value,
+    source_platform,
+    priority
 FROM combined_data
-ORDER BY response_token, priority ASC;
+ORDER BY response_token, field_id, priority ASC, ingested_at DESC;
 
 -- [MATERIALIZED VIEW] int_tf__core: Procesamiento denso para BI
 -- Nota: Las vistas materializadas no soportan RLS directo, se controla en el acceso al esquema
@@ -131,7 +169,7 @@ SELECT
     NULL::text AS question_text,
     NULL::text AS question_type,
     NULL::text AS response_value,
-    source,
+    source_platform,
     hidden_fields,
     submitted_at,
     submitted_at::date AS submitted_date
