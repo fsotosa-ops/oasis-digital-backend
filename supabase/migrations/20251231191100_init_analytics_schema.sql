@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS bronze.raw_responses_snapshot (
     ingestion_method TEXT DEFAULT 'api_backfill',
     form_id TEXT,
     response_token TEXT UNIQUE,
+    submitted_at TEXT,
     payload JSONB NOT NULL,
     ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 
