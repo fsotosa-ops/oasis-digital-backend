@@ -124,10 +124,12 @@ CREATE TABLE IF NOT EXISTS gold.dim_respondents (
     age_range_order INTEGER
 );
 
+DROP TABLE IF EXISTS gold.fact_responses CASCADE;
 CREATE TABLE IF NOT EXISTS gold.fact_responses (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id),
     response_token TEXT REFERENCES gold.dim_respondents(response_token),
+    question_id TEXT REFERENCES gold.dim_questions(question_id),
     question_text TEXT, 
     response_value TEXT,
     submitted_date DATE,
