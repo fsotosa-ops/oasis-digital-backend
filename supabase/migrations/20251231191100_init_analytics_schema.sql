@@ -1,4 +1,12 @@
 -- ==========================================
+-- 0. UPDATE SCHEMAS
+-- ==========================================
+
+DROP SCHEMA IF EXISTS bronze CASCADE;
+DROP SCHEMA IF EXISTS silver CASCADE;
+DROP SCHEMA IF EXISTS gold CASCADE;
+
+-- ==========================================
 -- 1. ESQUEMAS
 -- ==========================================
 CREATE SCHEMA IF NOT EXISTS bronze; 
