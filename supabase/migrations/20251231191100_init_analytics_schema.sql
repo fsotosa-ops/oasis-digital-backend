@@ -43,10 +43,28 @@ CREATE TABLE IF NOT EXISTS bronze.raw_responses_snapshot (
     response_token TEXT UNIQUE,
     payload JSONB NOT NULL,
     ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+
 );
+
+-- CAPA BRONZE: Snapshot de definiciones de preguntas
+CREATE TABLE IF NOT EXISTS bronze.raw_questions_snapshot (
+    id BIGSERIAL PRIMARY KEY,           -- ID interno de la fila
+    question_id TEXT,                   -- ID de Typeform
+    form_id TEXT,
+    form_title TEXT,
+    question_text TEXT,
+    question_ref TEXT,
+    question_type TEXT,
+    ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Permisos para que Mage pueda escribir
+GRANT ALL ON TABLE bronze.raw_questions_snapshot TO service_role;
 
 -- 🔥 SEGURIDAD: Activamos RLS también para snapshots
 ALTER TABLE bronze.raw_responses_snapshot ENABLE ROW LEVEL SECURITY;
+-- Permisos para que Mage pueda escribir
+GRANT ALL ON TABLE bronze.raw_questions_snapshot TO service_role;
 
 -- ==========================================
 -- 3. CAPA SILVER: TRANSFORMACIÓN E INTEGRACIÓN
