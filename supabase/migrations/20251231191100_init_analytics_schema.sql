@@ -96,6 +96,7 @@ WITH NO DATA;
 -- ==========================================
 -- 4. CAPA GOLD: MODELO DIMENSIONAL
 -- ==========================================
+DROP TABLE IF EXISTS gold.dim_questions CASCADE;
 
 CREATE TABLE IF NOT EXISTS gold.dim_questions (
     question_id TEXT PRIMARY KEY,
