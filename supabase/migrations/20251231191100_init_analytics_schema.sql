@@ -35,18 +35,22 @@ ALTER TABLE bronze.raw_responses_delta ENABLE ROW LEVEL SECURITY;
 
 
 -- Ingesta desde API (Backfill/Snapshot)
+--DROP TABLE IF EXISTS bronze.raw_responses_snapshot CASCADE;
 CREATE TABLE IF NOT EXISTS bronze.raw_responses_snapshot (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id),
     source_platform TEXT DEFAULT 'typeform',
     ingestion_method TEXT DEFAULT 'api_backfill',
+    form_id TEXT,
     response_token TEXT UNIQUE,
     payload JSONB NOT NULL,
     ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 
 );
 
+
 -- CAPA BRONZE: Snapshot de definiciones de preguntas
+--DROP TABLE bronze.raw_questions_snapshot;
 CREATE TABLE IF NOT EXISTS bronze.raw_questions_snapshot (
     id BIGSERIAL PRIMARY KEY,           -- ID interno de la fila
     question_id TEXT,                   -- ID de Typeform
@@ -54,7 +58,7 @@ CREATE TABLE IF NOT EXISTS bronze.raw_questions_snapshot (
     form_title TEXT,
     question_text TEXT,
     question_ref TEXT,
-    question_type TEXT,
+    type TEXT,
     ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
