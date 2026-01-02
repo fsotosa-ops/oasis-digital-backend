@@ -56,6 +56,7 @@ serve(async (req) => {
       .from('raw_responses_delta') // Tabla para ingesta real-time
       .insert({
         user_id: userId, // Puede ser null
+        form_id: formId,
         source_platform: 'typeform',
         ingestion_method: 'webhook', // Nombre exacto de la columna en tu SQL
         response_token: payload.form_response.token,

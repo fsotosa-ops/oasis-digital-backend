@@ -18,12 +18,14 @@ CREATE SCHEMA IF NOT EXISTS gold;
 -- ==========================================
 
 -- Ingesta desde Webhooks (Real-time)
+--DROP TABLE bronze.raw_responses_delta CASCADE;
 CREATE TABLE IF NOT EXISTS bronze.raw_responses_delta (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id), 
     source_platform TEXT DEFAULT 'typeform', 
     ingestion_method TEXT DEFAULT 'webhook',
     response_token TEXT,
+    form_id TEXT,
     payload JSONB NOT NULL,
     is_processed BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
@@ -77,23 +79,43 @@ GRANT ALL ON TABLE bronze.raw_questions_snapshot TO service_role;
 
 -- [VIEW] stg_tf__responses: Unificación de orígenes
 CREATE OR REPLACE VIEW silver.stg_tf__responses AS
-WITH unified AS (
-    SELECT user_id, source_platform, response_token, payload, created_at FROM bronze.raw_responses_delta
+WITH combined_data AS (
+    -- 1. Prioridad 1: Datos del Webhook (Delta)
+    SELECT 
+        user_id, 
+        source_platform, 
+        response_token, 
+        payload, 
+        form_id, -- Usamos la columna directa que agregamos
+        created_at AS source_timestamp,
+        1 AS priority -- El número más bajo tiene prioridad
+    FROM bronze.raw_responses_delta
+
     UNION ALL
-    SELECT user_id, source_platform, response_token, payload, ingested_at FROM bronze.raw_responses_snapshot
-    WHERE response_token NOT IN (SELECT response_token FROM bronze.raw_responses_delta)
+
+    -- 2. Prioridad 2: Datos del Backfill (Snapshot)
+    SELECT 
+        user_id, 
+        source_platform, 
+        response_token, 
+        payload, 
+        form_id,
+        ingested_at AS source_timestamp,
+        2 AS priority -- Prioridad secundaria
+    FROM bronze.raw_responses_snapshot
 )
-SELECT 
+SELECT DISTINCT ON (response_token) -- <--- LA MAGIA: Mantiene solo 1 fila por token
     user_id,
     source_platform AS source,
     response_token,
-    payload->>'form_id' AS form_id,
+    COALESCE(form_id, payload->>'form_id') AS form_id, -- Prioriza columna, si no, busca en JSON
     NULL::text AS field_id, 
     NULL::text AS field_ref,
     NULL::text AS response_value,
     payload->'hidden' AS hidden_fields,
-    created_at AS submitted_at
-FROM unified;
+    source_timestamp AS submitted_at
+FROM combined_data
+ORDER BY response_token, priority ASC;
 
 -- [MATERIALIZED VIEW] int_tf__core: Procesamiento denso para BI
 -- Nota: Las vistas materializadas no soportan RLS directo, se controla en el acceso al esquema
