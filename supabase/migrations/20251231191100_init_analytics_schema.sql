@@ -157,23 +157,22 @@ ORDER BY response_token, field_id, priority ASC, ingested_at DESC;
 
 -- [MATERIALIZED VIEW] int_tf__core: Procesamiento denso para BI
 -- Nota: Las vistas materializadas no soportan RLS directo, se controla en el acceso al esquema
-DROP MATERIALIZED VIEW IF EXISTS silver.int_tf__core;
-
+DROP MATERIALIZED VIEW IF EXISTS silver.int_tf__core CASCADE;
 CREATE MATERIALIZED VIEW silver.int_tf__core AS
 SELECT 
-    user_id,
-    response_token,
-    form_id,
-    form_title,
-    field_id,
-    question_text,
-    question_type,
-    response_value,
-    source_platform,
-    hidden_fields,
-    submitted_at,
-    submitted_at::date AS submitted_date
-FROM silver.stg_tf__responses
+    tf.user_id,
+    tf.response_token,
+    tf.form_id,
+    tf.field_id,
+    tf.response_value,
+    tf.source_platform,
+    qs.question_text,
+    tf.hidden_fields,
+    tf.submitted_at,
+    tf.submitted_at::date AS submitted_date
+FROM silver.stg_tf__responses tf
+LEFT JOIN bronze.raw_questions_snapshot qs 
+ON tf.field_id = qs.question_id
 WITH NO DATA;
 
 -- ==========================================
