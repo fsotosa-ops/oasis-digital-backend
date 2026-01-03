@@ -163,6 +163,7 @@ SELECT
     tf.user_id,
     tf.response_token,
     tf.form_id,
+    qs.form_title,
     tf.field_id,
     tf.response_value,
     tf.source_platform,
