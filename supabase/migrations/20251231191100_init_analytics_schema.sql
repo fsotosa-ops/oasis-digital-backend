@@ -179,7 +179,7 @@ WITH NO DATA;
 -- ==========================================
 -- 4. CAPA GOLD: MODELO DIMENSIONAL
 -- ==========================================
-DROP TABLE IF EXISTS gold.dim_questions CASCADE;
+--DROP TABLE IF EXISTS gold.dim_questions CASCADE;
 
 CREATE TABLE IF NOT EXISTS gold.dim_questions (
     question_id TEXT PRIMARY KEY,
@@ -191,20 +191,37 @@ CREATE TABLE IF NOT EXISTS gold.dim_questions (
     ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
-
+DROP TABLE gold.dim_respondents CASCADE;
 CREATE TABLE IF NOT EXISTS gold.dim_respondents (
     response_token TEXT PRIMARY KEY,
-    user_id UUID REFERENCES auth.users(id),
+    user_id UUID, -- Ojo: En dbt la FK se maneja distinto (ver punto 2)
+    submitted_at TIMESTAMP, -- Agregado (antes tenías submitted_date, ajusta según origen)
     form_id TEXT,
     form_title TEXT,
-    submitted_date DATE,
-    company TEXT,
-    workshop_type TEXT,
-    age FLOAT8,
-    email TEXT,
-    occupation TEXT,
+    
+    -- Datos demográficos y edad
+    birth_date DATE,
+    age FLOAT8, -- O NUMERIC
     age_range TEXT,
-    age_range_order INTEGER
+    age_range_order INTEGER,
+    
+    -- Geo
+    city TEXT,
+    state TEXT,
+    country TEXT,
+    
+    -- Info del taller/usuario
+    workshop_type TEXT, -- Alias de event_type
+    gender TEXT,
+    occupation TEXT,
+    education_level TEXT,
+    company TEXT,
+    
+    -- Contacto y Flags
+    email TEXT,
+    email_tenant BOOLEAN,
+    phone_number TEXT,
+    phone_number_tenant BOOLEAN
 );
 
 DROP TABLE IF EXISTS gold.fact_responses CASCADE;
