@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS gold.dim_questions (
     ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
-DROP TABLE gold.dim_respondents CASCADE;
+---DROP TABLE gold.dim_respondents CASCADE;
 CREATE TABLE IF NOT EXISTS gold.dim_respondents (
     response_token TEXT PRIMARY KEY,
     user_id UUID, -- Ojo: En dbt la FK se maneja distinto (ver punto 2)
@@ -232,9 +232,8 @@ CREATE TABLE IF NOT EXISTS gold.fact_responses (
     question_id TEXT REFERENCES gold.dim_questions(question_id),
     question_text TEXT, 
     response_value TEXT,
-    submitted_date DATE,
-    workshop_type TEXT,
-    company TEXT
+    submitted_at TIMESTAMP,
+    submitted_date DATE
 );
 
 -- ==========================================
